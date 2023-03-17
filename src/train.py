@@ -11,7 +11,6 @@ from tqdm import tqdm
 from utils.config import Config
 from utils.utils_func import *
 from utils.utils_data import DLoader
-from models.cede import CEDe
 from models.bert import BERT
 from transformers import top_k_top_p_filtering
 
