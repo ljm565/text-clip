@@ -60,6 +60,7 @@ CLIP은 OpenAI에서 공개한 image-text 쌍 데이터를 이용하여 데이�
 ## 결과
 * ### 그래프 분류 학습 결과
     * Loss History<br>
+    (학습을 100 epoch을 진행하였지만, loss는 100 떨어지고 있었음)
     <img src="image/loss.png" width="80%"><br><br>
 
     * Test set loss: 2.057 (98 epoch)<br>
