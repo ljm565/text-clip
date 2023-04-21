@@ -5,10 +5,9 @@ from torch.utils.data import Dataset
 
 
 class DLoader(Dataset):
-    def __init__(self, chatbot_data, sentiment_data, tokenizer, config):
+    def __init__(self, chatbot_data, tokenizer, config):
         random.seed(999) 
         self.data = self.construct_biturn_data(list(filter(lambda x: len(x) >= 2, chatbot_data)))
-        # self.data = chatbot_data + sentiment_data
         random.shuffle(self.data)
         self.tokenizer = tokenizer
         self.cls_token_id = self.tokenizer.cls_token_id
@@ -24,7 +23,7 @@ class DLoader(Dataset):
         
         src = src + [self.pad_token_id] * (self.max_len - len(src))
         trg = trg + [self.pad_token_id] * (self.max_len - len(trg))
-        return src, trg, -1
+        return src, trg
 
     
     def make_sentiment_data(self, data):
@@ -45,12 +44,9 @@ class DLoader(Dataset):
 
     def __getitem__(self, idx):
         d = self.data[idx]
-        # if isinstance(d[0], int):
-        #     s, t, sentiment_cls = self.make_sentiment_data(d)
-        # else:
-        s, t, sentiment_cls = self.make_chatbot_data(d)
+        s, t = self.make_chatbot_data(d)
 
-        return torch.LongTensor(s), torch.LongTensor(t)#, torch.tensor(sentiment_cls)
+        return torch.LongTensor(s), torch.LongTensor(t)
 
 
     def __len__(self):

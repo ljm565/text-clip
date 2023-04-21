@@ -2,17 +2,19 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, random_split
-from torch.optim.lr_scheduler import OneCycleLR, MultiStepLR
-import pickle
-from tokenizer import Tokenizer
-import random
+
 import time
+import pickle
+import random
 from tqdm import tqdm
-from utils.config import Config
-from utils.utils_func import *
-from utils.utils_data import DLoader
+
 from models.bert import BERT
-from transformers import top_k_top_p_filtering
+from utils.utils_func import *
+from tokenizer import Tokenizer
+from utils.config import Config
+from utils.utils_data import DLoader
+
+
 
 
 
@@ -41,16 +43,14 @@ class Trainer:
         self.result_num = self.config.result_num
 
         # define tokenizer
-        self.tokenizer = Tokenizer(self.config)
+        self.tokenizer = Tokenizer()
         self.config.vocab_size = self.tokenizer.vocab_size
 
         # # dataloader
-        # if self.mode != 'test':
         torch.manual_seed(999)  # for reproducibility
         chatbot_data_path = os.path.join(*[self.base_path, 'data', 'processed', 'chatbot', 'all_data.pkl'])
-        sentiment_data_path = os.path.join(*[self.base_path, 'data', 'processed', 'sentiment', 'all_data.pkl'])
-        chatbot_data, sentiment_data = load_dataset(chatbot_data_path), load_dataset(sentiment_data_path)
-        self.dataset = DLoader(chatbot_data, sentiment_data, self.tokenizer, self.config)
+        chatbot_data = load_dataset(chatbot_data_path)
+        self.dataset = DLoader(chatbot_data, self.tokenizer, self.config)
         data_size = len(self.dataset)
         train_size = int(data_size * 0.95)
         val_size = int(data_size * 0.03)
@@ -69,22 +69,13 @@ class Trainer:
         # model, optimizer, loss
         self.model = BERT(self.config, self.tokenizer, self.device).to(self.device)
         self.chatbot_criterion = nn.CrossEntropyLoss()
-        # self.sentiment_criterion = nn.CrossEntropyLoss(ignore_index=-1)
     
         if self.mode == 'train':
-            total_steps = len(self.dataloaders['train']) * self.epochs
-            pct_start = 100 / total_steps
-            final_div_factor = self.lr / 25 / 1e-7    # OneCycleLR default value is 25
             self.optimizer = optim.AdamW(self.model.parameters(), lr=self.lr)
-            print(self.lr)
-            # self.scheduler = OneCycleLR(self.optimizer, max_lr=self.lr, total_steps=total_steps, pct_start=pct_start, final_div_factor=final_div_factor)
-            # milestones = list(range(8, self.epochs, 8))
-            # self.scheduler = MultiStepLR(self.optimizer, milestones=milestones, gamma=0.8)
             if self.continuous:
                 self.check_point = torch.load(self.model_path, map_location=self.device)
                 self.model.load_state_dict(self.check_point['model'])
                 self.optimizer.load_state_dict(self.check_point['optimizer'])
-                self.scheduler.load_state_dict(self.check_point['scheduler'])
                 del self.check_point
                 torch.cuda.empty_cache()
         else:
@@ -111,7 +102,6 @@ class Trainer:
                 if phase == 'train':
                     epoch_loss = self.train(phase, epoch)
                     train_loss_history.append(epoch_loss)
-                    # self.scheduler.step()
                 else:
                     loss = self.inference(phase)
                     if phase == 'val':
@@ -232,27 +222,22 @@ class Trainer:
                 print('trg {} ({:4f}): {}'.format(n, s, all_trg_txt[i]))
             print('-'*50 + '\n\n')
 
-
-
-
-
         top1_p, top5_p, top10_p = 0, 0, 0
-
-        # for txt_id in tqdm(range(len(all_txt))):
-        #     sen = all_txt[txt_id]
-        #     s = [self.tokenizer.cls_token_id] + self.tokenizer.encode(sen)[:self.max_len-2] + [self.tokenizer.sep_token_id]
-        #     s = s + [self.tokenizer.pad_token_id] * (self.max_len - len(s))
-        #     s = torch.LongTensor(s).to(self.device).unsqueeze(0)
+        for txt_id in tqdm(range(len(all_txt))):
+            sen = all_txt[txt_id]
+            s = [self.tokenizer.cls_token_id] + self.tokenizer.encode(sen)[:self.max_len-2] + [self.tokenizer.sep_token_id]
+            s = s + [self.tokenizer.pad_token_id] * (self.max_len - len(s))
+            s = torch.LongTensor(s).to(self.device).unsqueeze(0)
             
-        #     _, emb, _, = self.model(s, s)
-        #     sim = torch.mm(emb.detach().cpu(), all_trg_emb.transpose(0, 1))# * self.model.temperature.exp()
-        #     _, idx = torch.sort(sim.squeeze(), descending=True)
-        #     idx = idx[:topk]
+            _, emb, _, = self.model(s, s)
+            sim = torch.mm(emb.detach().cpu(), all_trg_emb.transpose(0, 1))# * self.model.temperature.exp()
+            _, idx = torch.sort(sim.squeeze(), descending=True)
+            idx = idx[:topk]
 
-        #     top1_p += isInTopk(txt_id, idx, 1)
-        #     top5_p += isInTopk(txt_id, idx, 5)
-        #     top10_p += isInTopk(txt_id, idx, 10)
+            top1_p += isInTopk(txt_id, idx, 1)
+            top5_p += isInTopk(txt_id, idx, 5)
+            top10_p += isInTopk(txt_id, idx, 10)
         
-        # print('top1: {}'.format(top1_p / len(all_txt)))
-        # print('top5: {}'.format(top5_p / len(all_txt)))
-        # print('top10: {}'.format(top10_p / len(all_txt)))
+        print('top1: {}'.format(top1_p / len(all_txt)))
+        print('top5: {}'.format(top5_p / len(all_txt)))
+        print('top10: {}'.format(top10_p / len(all_txt)))
