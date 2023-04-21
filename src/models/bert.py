@@ -15,14 +15,12 @@ class BERT(nn.Module):
 
         self.model = BertModel.from_pretrained('skt/kobert-base-v1')
 
-        self.bias = config.bias        
         self.hidden_dim = self.model.config.hidden_size
 
         self.layer_norm = nn.LayerNorm(self.hidden_dim, eps=config.layernorm_eps)
         self.src_wts = nn.Linear(self.hidden_dim, self.hidden_dim)
         self.trg_wts = nn.Linear(self.hidden_dim, self.hidden_dim)
         self.temperature = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
-        self.sentiment_fc = nn.Linear(self.hidden_dim, 2, bias=self.bias)
 
 
     def make_mask(self, x):

@@ -5,7 +5,6 @@
 
 
     "max_len": 64,
-    "bias": 0,
     "layernorm_eps": 1e-06,
 
 

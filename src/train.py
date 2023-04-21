@@ -115,7 +115,7 @@ class Trainer:
                             best_epoch = best_epoch_info + epoch + 1
                             save_checkpoint(self.model_path, self.model, self.optimizer)
                             
-                            self.loss_data = {'best_epoch': best_epoch, 'best_val_sloss': best_val_loss, 'train_loss_history': train_loss_history, 'val_loss_history': val_loss_history}
+                            self.loss_data = {'best_epoch': best_epoch, 'best_val_loss': best_val_loss, 'train_loss_history': train_loss_history, 'val_loss_history': val_loss_history}
                             print('Saving the loss related data...')
                             with open(self.config.loss_data_path, 'wb') as f:
                                 pickle.dump(self.loss_data, f)
@@ -128,7 +128,7 @@ class Trainer:
                 break
 
         print('best val loss: {:4f}, best epoch: {:d}\n'.format(best_val_loss, best_epoch))
-        self.loss_data = {'best_epoch': best_epoch, 'best_val_sloss': best_val_loss, 'train_loss_history': train_loss_history, 'val_loss_history': val_loss_history}
+        self.loss_data = {'best_epoch': best_epoch, 'best_val_loss': best_val_loss, 'train_loss_history': train_loss_history, 'val_loss_history': val_loss_history}
         return self.loss_data
 
 
