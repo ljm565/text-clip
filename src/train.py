@@ -8,7 +8,7 @@ import pickle
 import random
 from tqdm import tqdm
 
-from models.bert import BERT
+from models.bert import KoBERTCLIP, BERTCLIP
 from utils.utils_func import *
 from tokenizer import Tokenizer
 from utils.config import Config
@@ -67,7 +67,7 @@ class Trainer:
             self.dataloaders = {s: DataLoader(d, self.batch_size, shuffle=False) for s, d in self.dataset.items() if s == 'test'}
 
         # model, optimizer, loss
-        self.model = BERT(self.config, self.tokenizer, self.device).to(self.device)
+        self.model = KoBERTCLIP(self.config, self.tokenizer, self.device).to(self.device)
         self.chatbot_criterion = nn.CrossEntropyLoss()
     
         if self.mode == 'train':

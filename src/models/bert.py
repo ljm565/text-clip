@@ -7,9 +7,9 @@ from transformers import BertModel
 
 
 # KoBERT
-class BERT(nn.Module):
+class KoBERTCLIP(nn.Module):
     def __init__(self, config, tokenizer, device):
-        super(BERT, self).__init__()
+        super(KoBERTCLIP, self).__init__()
         self.tokenizer = tokenizer
         self.device = device
 
