@@ -8,7 +8,7 @@ import pickle
 import random
 from tqdm import tqdm
 
-from models.bert import KoBERTCLIP, BERTCLIP
+from models.bert import KoBERTCLIP
 from utils.utils_func import *
 from tokenizer import Tokenizer
 from utils.config import Config

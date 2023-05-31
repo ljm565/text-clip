@@ -51,6 +51,7 @@ CLIP은 OpenAI에서 공개한 image-text 쌍 데이터를 이용하여 데이�
     * max_len: 각 문장의 최대 길이.
     * layernorm_eps: Layer normalization layer epsilon.
     * batch_size: batch size 지정.
+    * vocab_size: 사용하고자하는 vocab size.
     * epochs: 학습 epoch 설정.
     * lr: learning rate 지정.
     * early_stop_criterion: Validation set의 최대 accuracy를 내어준 학습 epoch 대비, 설정된 숫자만큼 epoch이 지나도 나아지지 않을 경우 학습 조기 종료.
