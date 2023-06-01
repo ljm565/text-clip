@@ -20,6 +20,8 @@ from utils.utils_data import DLoader
 
 class Trainer:
     def __init__(self, config:Config, device:torch.device, mode:str, continuous:int):
+        torch.manual_seed(999)  # for reproducibility
+
         self.config = config
         self.device = device
         self.mode = mode
@@ -34,6 +36,7 @@ class Trainer:
         # path, data params
         self.base_path = self.config.base_path
         self.model_path = self.config.model_path
+        self.data_name = self.config.data_name
  
         # train params
         self.batch_size = self.config.batch_size
@@ -42,21 +45,23 @@ class Trainer:
         self.max_len = self.config.max_len
         self.result_num = self.config.result_num
 
-        # define tokenizer
-        self.tokenizer = Tokenizer()
-        self.config.vocab_size = self.tokenizer.vocab_size
+        if self.data_name == 'koChat':
+            # define tokenizer
+            self.tokenizer = Tokenizer(ko=True)
+            self.config.vocab_size = self.tokenizer.vocab_size
 
-        # # dataloader
-        torch.manual_seed(999)  # for reproducibility
-        chatbot_data_path = os.path.join(*[self.base_path, 'data', 'processed', 'chatbot', 'all_data.pkl'])
-        chatbot_data = load_dataset(chatbot_data_path)
-        self.dataset = DLoader(chatbot_data, self.tokenizer, self.config)
-        data_size = len(self.dataset)
-        train_size = int(data_size * 0.95)
-        val_size = int(data_size * 0.03)
-        test_size = data_size - train_size - val_size
-
-        self.trainset, self.valset, self.testset = random_split(self.dataset, [train_size, val_size, test_size])
+            # # dataloader
+            chatbot_data_path = os.path.join(*[self.base_path, 'data', self.data_name, 'processed', 'chatbot', 'all_data.pkl'])
+            chatbot_data = load_dataset(chatbot_data_path)
+            self.dataset = DLoader(chatbot_data, self.tokenizer, self.config)
+            data_size = len(self.dataset)
+            train_size = int(data_size * 0.95)
+            val_size = int(data_size * 0.03)
+            test_size = data_size - train_size - val_size
+            self.trainset, self.valset, self.testset = random_split(self.dataset, [train_size, val_size, test_size])
+        else:
+            pass
+        
         if self.mode == 'train':
             self.dataset = {'train': self.trainset, 'val': self.valset, 'test': self.testset}
             self.dataloaders = {

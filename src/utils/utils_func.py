@@ -81,3 +81,10 @@ def isInTopk(gt_id, selected_id, topk):
     if gt_id in selected_id[:topk]:
         return 1
     return 0
+
+
+def make_dataset_path(base_path, data_name):
+    dataset_path = {}
+    for split in ['train', 'val', 'test']:
+        dataset_path[split] = base_path+'data/' + data_name + '/processed/en-de.' + split
+    return dataset_path

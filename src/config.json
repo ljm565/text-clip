@@ -1,7 +1,9 @@
 {   
+    "data": "dailydialog",    
+
     "base_path": "./",
-    "model_name": "chat_clip",
-    "loss_data_name": "chat_clip",
+    "model_name": "dailydialog_clip",
+    "loss_data_name": "dailydialog_clip",
 
 
     "max_len": 64,

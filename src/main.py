@@ -8,7 +8,7 @@ from train import Trainer
 from prepare_chatbot_data import prepare_data_type1, prepare_data_type2, prepare_data_type3, prepare_data_type4
 from prepare_sentiment_data import prepare_sdata_type1, prepare_sdata_type2, prepare_sdata_type3, prepare_sdata_type4
 from utils.config import Config
-from utils.utils_func import collect_all_data, make_vocab_file
+from utils.utils_func import collect_all_data, make_vocab_file, make_dataset_path
 
 
 
@@ -29,57 +29,41 @@ def main(config_path:Config, args:ArgumentParser):
     else:
         config = Config(config_path)
         base_path = config.base_path
+        data_name = config.data
 
         # make neccessary folders
         os.makedirs(base_path + 'model', exist_ok=True)
         os.makedirs(base_path + 'loss', exist_ok=True)
         os.makedirs(base_path + 'logs', exist_ok=True)
-        os.makedirs(base_path + 'data/processed', exist_ok=True)
+        os.makedirs(base_path + 'data/' + data_name + '/processed', exist_ok=True)
 
-        # prepare chatbot data
-        if not os.path.isdir(base_path + 'data/processed/chatbot/'):
-            os.makedirs(base_path + 'data/processed/chatbot')
-            raw_data_path = base_path + 'data/raw/chatbot/'
-            folder_dict = {'한국어 대화': 'type1',
-                            '소상공인 고객 주문 질의-응답 텍스트': 'type2', 
-                            '용도별 목적대화 데이터': 'type3', 
-                            '주제별 텍스트 일상 대화 데이터': 'type4'}
+        if data_name == 'koChat':
+            # prepare chatbot data
+            if not os.path.isdir(base_path + 'data/' + data_name + '/processed/chatbot/'):
+                os.makedirs(base_path + 'data/' + data_name + '/processed/chatbot')
+                raw_data_path = base_path + 'data/' + data_name + '/raw/chatbot/'
+                folder_dict = {'한국어 대화': 'type1',
+                                '소상공인 고객 주문 질의-응답 텍스트': 'type2', 
+                                '용도별 목적대화 데이터': 'type3', 
+                                '주제별 텍스트 일상 대화 데이터': 'type4'}
 
-            for folder_name, type in folder_dict.items():
-                if type == 'type4':
-                    prepare_data_type4(raw_data_path, folder_name)
-            
-            chatbot_data = collect_all_data(base_path + 'data/processed/chatbot/')
-            all_data_path = base_path + 'data/processed/chatbot/all_data.txt'
-            special_token_path = base_path + 'data/processed/chatbot/special_tokens.txt'
-            make_vocab_file(chatbot_data, all_data_path, special_token_path)
+                for folder_name, type in folder_dict.items():
+                    if type == 'type4':
+                        prepare_data_type4(raw_data_path, folder_name)
+                
+                chatbot_data = collect_all_data(base_path + 'data/' + data_name + '/processed/chatbot/')
+                all_data_path = base_path + 'data/' + data_name + '/processed/chatbot/all_data.txt'
+                special_token_path = base_path + 'data/' + data_name + '/processed/chatbot/special_tokens.txt'
+                make_vocab_file(chatbot_data, all_data_path, special_token_path)
+
+            # check tokenizer file
+            if not os.path.isdir(base_path + 'data/' + data_name + '/tokenizer/vocab_' + str(config.vocab_size)):
+                print('You must make vocab and tokenizer first..')
+                sys.exit()
+            config.tokenizer_path = base_path+'data/' + data_name + '/tokenizer/vocab_'+str(config.vocab_size)+'/vocab.txt'
         
-        # prepare sentiment data
-        if not os.path.isdir(base_path + 'data/processed/sentiment/'):
-            os.makedirs(base_path + 'data/processed/sentiment')
-            raw_data_path = base_path + 'data/raw/sentiment/'
-            file_dict = {'shopping.txt': 'type1', 
-                    'steam.txt': 'type2', 
-                    'movie.txt': 'type3', 
-                    'daily.csv': 'type4'}
-
-            for file_name, type in file_dict.items():
-                if type == 'type1':
-                    prepare_sdata_type1(raw_data_path, file_name)
-                elif type == 'type2':
-                    prepare_sdata_type2(raw_data_path, file_name)
-                elif type == 'type3':
-                    prepare_sdata_type3(raw_data_path, file_name)
-                elif type == 'type4':
-                    prepare_sdata_type4(raw_data_path, file_name)
-            
-            collect_all_data(base_path + 'data/processed/sentiment/')
-
-        # check tokenizer file
-        if not os.path.isdir(base_path + 'data/tokenizer/vocab_' + str(config.vocab_size)):
-            print('You must make vocab and tokenizer first..')
-            sys.exit()
-        config.tokenizer_path = base_path+'data/tokenizer/vocab_'+str(config.vocab_size)+'/vocab.txt'
+        else:
+            config.dataset_path = make_dataset_path(base_path, data_name)
         
         # redefine config
         config.loss_data_path = base_path + 'loss/' + config.loss_data_name + '.pkl'
