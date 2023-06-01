@@ -1,11 +1,12 @@
+from transformers import BertTokenizer
 from kobert_tokenizer import KoBERTTokenizer
 
 
 
 class Tokenizer:
     def __init__(self, ko=False):
-        if ko:
-            self.tokenizer = KoBERTTokenizer.from_pretrained('skt/kobert-base-v1')
+        self.tokenizer = KoBERTTokenizer.from_pretrained('skt/kobert-base-v1') if ko \
+            else BertTokenizer.from_pretrained('bert-base-uncased')
 
         self.pad_token, self.pad_token_id = self.tokenizer.pad_token, self.tokenizer.pad_token_id
         self.cls_token, self.cls_token_id = self.tokenizer.cls_token, self.tokenizer.cls_token_id

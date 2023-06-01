@@ -8,7 +8,7 @@ import pickle
 import random
 from tqdm import tqdm
 
-from models.bert import KoBERTCLIP
+from models.bert import BertClip
 from utils.utils_func import *
 from tokenizer import Tokenizer
 from utils.config import Config
@@ -37,6 +37,7 @@ class Trainer:
         self.base_path = self.config.base_path
         self.model_path = self.config.model_path
         self.data_name = self.config.data_name
+        isEng = False if self.data_name == 'koChat' else True
  
         # train params
         self.batch_size = self.config.batch_size
@@ -45,23 +46,21 @@ class Trainer:
         self.max_len = self.config.max_len
         self.result_num = self.config.result_num
 
+        # define tokenizer
+        self.tokenizer = Tokenizer(ko=isEng)
+        self.config.vocab_size = self.tokenizer.vocab_size
+        
+        # dataloader
         if self.data_name == 'koChat':
-            # define tokenizer
-            self.tokenizer = Tokenizer(ko=True)
-            self.config.vocab_size = self.tokenizer.vocab_size
-
-            # # dataloader
             chatbot_data_path = os.path.join(*[self.base_path, 'data', self.data_name, 'processed', 'chatbot', 'all_data.pkl'])
-            chatbot_data = load_dataset(chatbot_data_path)
-            self.dataset = DLoader(chatbot_data, self.tokenizer, self.config)
-            data_size = len(self.dataset)
-            train_size = int(data_size * 0.95)
-            val_size = int(data_size * 0.03)
-            test_size = data_size - train_size - val_size
+            self.dataset = DLoader(load_dataset(chatbot_data_path), self.tokenizer, self.config)
+            train_size, val_size = int(len(self.dataset) * 0.95), int(len(self.dataset) * 0.03)
+            test_size = len(self.dataset) - train_size - val_size
             self.trainset, self.valset, self.testset = random_split(self.dataset, [train_size, val_size, test_size])
         else:
-            pass
-        
+            self.dataset = {s: DLoader(load_dataset(p), self.tokenizer, self.config) for s, p in self.config.dataset_path.items()}
+            self.trainset, self.valset, self.testset = self.dataset['train'], self.dataset['val'], self.dataset['test']
+
         if self.mode == 'train':
             self.dataset = {'train': self.trainset, 'val': self.valset, 'test': self.testset}
             self.dataloaders = {
@@ -72,7 +71,7 @@ class Trainer:
             self.dataloaders = {s: DataLoader(d, self.batch_size, shuffle=False) for s, d in self.dataset.items() if s == 'test'}
 
         # model, optimizer, loss
-        self.model = KoBERTCLIP(self.config, self.tokenizer, self.device).to(self.device)
+        self.model = BertClip(self.config, self.tokenizer, self.device, isEng).to(self.device)
         self.chatbot_criterion = nn.CrossEntropyLoss()
     
         if self.mode == 'train':

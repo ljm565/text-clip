@@ -6,14 +6,14 @@ from transformers import BertModel
 
 
 
-# KoBERT
-class KoBERTCLIP(nn.Module):
-    def __init__(self, config, tokenizer, device):
-        super(KoBERTCLIP, self).__init__()
+class BertClip(nn.Module):
+    def __init__(self, config, tokenizer, device, ko=False):
+        super(BertClip, self).__init__()
         self.tokenizer = tokenizer
         self.device = device
 
-        self.model = BertModel.from_pretrained('skt/kobert-base-v1')
+        self.model = BertModel.from_pretrained('skt/kobert-base-v1') if ko \
+            else BertModel.from_pretrained('bert-base-uncased')
 
         self.hidden_dim = self.model.config.hidden_size
 
