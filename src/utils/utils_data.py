@@ -17,7 +17,7 @@ class DLoader(Dataset):
         self.length = len(self.data)
 
 
-    def pad_(self, data):
+    def tokenize_(self, data):
         src = [self.cls_token_id] + self.tokenizer.encode(data[0])[:self.max_len-2] + [self.sep_token_id]
         trg = [self.cls_token_id] + self.tokenizer.encode(data[1])[:self.max_len-2] + [self.sep_token_id]
         
@@ -36,7 +36,7 @@ class DLoader(Dataset):
 
     def __getitem__(self, idx):
         d = self.data[idx]
-        s, t = self.pad_(d)
+        s, t = self.tokenize_(d)
 
         return torch.LongTensor(s), torch.LongTensor(t)
 

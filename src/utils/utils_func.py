@@ -86,5 +86,5 @@ def isInTopk(gt_id, selected_id, topk):
 def make_dataset_path(base_path, data_name):
     dataset_path = {}
     for split in ['train', 'val', 'test']:
-        dataset_path[split] = base_path+'data/' + data_name + '/processed/en-de.' + split
+        dataset_path[split] = base_path+'data/' + data_name + '/processed/' + data_name + '.' + split
     return dataset_path

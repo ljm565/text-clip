@@ -36,7 +36,7 @@ class Trainer:
         # path, data params
         self.base_path = self.config.base_path
         self.model_path = self.config.model_path
-        self.data_name = self.config.data_name
+        self.data_name = self.config.data
         isEng = False if self.data_name == 'koChat' else True
  
         # train params
