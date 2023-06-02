@@ -48,7 +48,7 @@ class Trainer:
 
         # # dataloader
         torch.manual_seed(999)  # for reproducibility
-        chatbot_data_path = os.path.join(*[self.base_path, 'data', 'processed', 'chatbot', 'all_data.pkl'])
+        chatbot_data_path = os.path.join(*[self.base_path, 'data', 'koChat', 'processed', 'chatbot', 'all_data.pkl'])
         chatbot_data = load_dataset(chatbot_data_path)
         self.dataset = DLoader(chatbot_data, self.tokenizer, self.config)
         data_size = len(self.dataset)
