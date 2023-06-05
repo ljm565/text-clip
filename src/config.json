@@ -1,16 +1,16 @@
 {   
-    "data": "dailydialog",    
+    "data": "semantic",    
 
     "base_path": "./",
-    "model_name": "dailydialog_clip",
-    "loss_data_name": "dailydialog_clip",
+    "model_name": "semantic_bert",
+    "loss_data_name": "semantic_bert",
 
 
-    "max_len": 64,
+    "max_len": 128,
     "layernorm_eps": 1e-06,
 
 
-    "batch_size": 64,
+    "batch_size": 40,
     "epochs": 100,
     "lr": 1e-6,
 

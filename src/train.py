@@ -12,7 +12,7 @@ from models.bert import BertClip
 from utils.utils_func import *
 from tokenizer import Tokenizer
 from utils.config import Config
-from utils.utils_data import DLoader
+from utils.utils_data import DLoader, SemanticDLoader
 
 
 
@@ -57,18 +57,17 @@ class Trainer:
             train_size, val_size = int(len(self.dataset) * 0.95), int(len(self.dataset) * 0.03)
             test_size = len(self.dataset) - train_size - val_size
             self.trainset, self.valset, self.testset = random_split(self.dataset, [train_size, val_size, test_size])
+            self.dataset = {'train': self.trainset, 'val': self.valset, 'test': self.testset}
         else:
             self.dataset = {s: DLoader(load_dataset(p), self.tokenizer, self.config) for s, p in self.config.dataset_path.items()}
-            self.trainset, self.valset, self.testset = self.dataset['train'], self.dataset['val'], self.dataset['test']
 
         if self.mode == 'train':
-            self.dataset = {'train': self.trainset, 'val': self.valset, 'test': self.testset}
             self.dataloaders = {
                 s: DataLoader(d, self.batch_size, shuffle=True) if s == 'train' else DataLoader(d, self.batch_size, shuffle=False)
-                for s, d in self.dataset.items()}
+                    for s, d in self.dataset.items()}
         else:
-            self.dataset = {'test': self.testset}
-            self.dataloaders = {s: DataLoader(d, self.batch_size, shuffle=False) for s, d in self.dataset.items() if s == 'test'}
+            tmp = 'test' if self.data_name != 'semantic' else 'val'
+            self.dataloaders = {s: DataLoader(d, self.batch_size, shuffle=False) for s, d in self.dataset.items() if s == tmp}
 
         # model, optimizer, loss
         self.model = BertClip(self.config, self.tokenizer, self.device, isEng).to(self.device)
@@ -97,11 +96,12 @@ class Trainer:
         val_loss_history = [] if not self.continuous else self.loss_data['val_loss_history']
         best_epoch_info = 0 if not self.continuous else self.loss_data['best_epoch']
 
+        steps = ['train', 'val'] if self.data_name == 'semantic' else ['train', 'val', 'test']
         for epoch in range(self.epochs):
             start = time.time()
             print(epoch+1, '/', self.epochs)
             print('-'*10)
-            for phase in ['train', 'val', 'test']:
+            for phase in steps:
                 print('Phase: {}'.format(phase))
                 if phase == 'train':
                     epoch_loss = self.train(phase, epoch)
@@ -155,7 +155,7 @@ class Trainer:
 
             total_loss +=  loss.item() * batch_size
 
-            if i % 100 == 0:
+            if i % 1000 == 0:
                 print('Epoch {}: {}/{} step loss: {}'.format(epoch+1, i, len(self.dataloaders[phase]), loss.item()))
 
         epoch_loss = total_loss / len(self.dataloaders[phase].dataset)

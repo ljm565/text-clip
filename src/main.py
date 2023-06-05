@@ -64,6 +64,8 @@ def main(config_path:Config, args:ArgumentParser):
         
         else:
             config.dataset_path = make_dataset_path(base_path, data_name)
+            if data_name == 'semantic':
+                del config.dataset_path['test']
         
         # redefine config
         config.loss_data_path = base_path + 'loss/' + config.loss_data_name + '.pkl'
