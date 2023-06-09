@@ -75,7 +75,7 @@ class SemanticDLoader(Dataset):
         try:
             label = self.data[idx][2]
         except:
-            label = 0
+            label = 1
         return torch.LongTensor(s), torch.LongTensor(t), torch.tensor(label)
 
 
