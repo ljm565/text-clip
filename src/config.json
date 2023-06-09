@@ -2,9 +2,10 @@
     "data": "semantic",    
 
     "base_path": "./",
-    "model_name": "semantic_bert",
-    "loss_data_name": "semantic_bert",
+    "model_name": "semantic_bert_avg",
+    "loss_data_name": "semantic_bert_avg",
 
+    "flag": "avg",
 
     "max_len": 128,
     "layernorm_eps": 1e-06,

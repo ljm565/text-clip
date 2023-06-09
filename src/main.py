@@ -79,6 +79,9 @@ def main(config_path:Config, args:ArgumentParser):
         with open(model_json_path, 'w') as f:
             json.dump(config.__dict__, f)
     
+    if args.mode == 'benchmark':
+        config.dataset_path['val'] = base_path + 'data/benchmark/' + args.benchmark + '/data.val'
+
     trainer = Trainer(config, device, args.mode, args.cont)
 
     if args.mode == 'train':
@@ -96,7 +99,17 @@ def main(config_path:Config, args:ArgumentParser):
             
     elif args.mode == 'test':
         print('Start testing...\n')
-        trainer.test('test')
+        try:
+            trainer.test('test')
+        except KeyError:
+            trainer.test('val')
+
+    elif args.mode == 'benchmark':
+        print('Start testing...\n')
+        try:
+            trainer.benchmark_test('test')
+        except KeyError:
+            trainer.benchmark_test('val')
 
     else:
         print("Please select mode among 'train', 'inference', and 'test'..")
@@ -110,9 +123,10 @@ if __name__ == '__main__':
 
     parser = ArgumentParser()
     parser.add_argument('-d', '--device', type=str, required=True, choices=['cpu', 'gpu'])
-    parser.add_argument('-m', '--mode', type=str, required=True, choices=['train', 'inference', 'test'])
+    parser.add_argument('-m', '--mode', type=str, required=True, choices=['train', 'inference', 'test', 'benchmark'])
     parser.add_argument('-c', '--cont', type=int, default=0, required=False)
     parser.add_argument('-n', '--name', type=str, required=False)
+    parser.add_argument('-b', '--benchmark', type=str, required=False)
     args = parser.parse_args()
 
     main(path, args)

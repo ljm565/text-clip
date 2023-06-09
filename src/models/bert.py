@@ -11,6 +11,8 @@ class BertClip(nn.Module):
         super(BertClip, self).__init__()
         self.tokenizer = tokenizer
         self.device = device
+        self.flag = config.flag
+        assert self.flag in ['eos', 'avg', 'max']
 
         self.model = BertModel.from_pretrained('skt/kobert-base-v1') if ko \
             else BertModel.from_pretrained('bert-base-uncased')
@@ -32,19 +34,35 @@ class BertClip(nn.Module):
         mask = torch.tensor(x == self.tokenizer.sep_token_id, dtype=torch.long)
         mask = torch.argmax(mask, dim=1)
         return mask
-        
+    
+
+    def get_features(self, src, trg):
+        if self.flag == 'eos':
+            src_eos, trg_eos = self.find_eos(src), self.find_eos(trg)
+            src, trg = src[torch.arange(self.batch_size), src_eos], trg[torch.arange(self.batch_size), trg_eos]
+        elif self.flag == 'avg':
+            hidden_dim = src.size(-1)
+            self.src_mask, self.trg_mask = self.src_mask.unsqueeze(-1).repeat(1, 1, hidden_dim), self.trg_mask.unsqueeze(-1).repeat(1, 1, hidden_dim)
+            src, trg = src.masked_fill(self.src_mask == 0, 0), trg.masked_fill(self.trg_mask == 0, 0)
+            src, trg = torch.mean(src, dim=1), torch.mean(trg, dim=1)
+        elif self.flag == 'max':
+            self.src_mask, self.trg_mask = self.src_mask.unsqueeze(-1).repeat(1, 1, hidden_dim), self.trg_mask.unsqueeze(-1).repeat(1, 1, hidden_dim)
+            src, trg = src.masked_fill(self.src_mask == 0, 0), trg.masked_fill(self.trg_mask == 0, 0)
+            src, trg = torch.amax(src, dim=1), torch.amax(trg, dim=1)
+        return src, trg
+
 
     def forward(self, src, trg):
-        batch_size = src.size(0)
-        src_mask, trg_mask = self.make_mask(src), self.make_mask(trg)
-        src_eos, trg_eos = self.find_eos(src), self.find_eos(trg)
-
-        src, trg = self.model(input_ids=src, attention_mask=src_mask)['last_hidden_state'], self.model(input_ids=trg, attention_mask=trg_mask)['last_hidden_state']
+        self.batch_size = src.size(0)
+        self.src_mask, self.trg_mask = self.make_mask(src), self.make_mask(trg)
+        
+        src, trg = self.model(input_ids=src, attention_mask=self.src_mask)['last_hidden_state'], self.model(input_ids=trg, attention_mask=self.trg_mask)['last_hidden_state']
         src, trg = self.layer_norm(src), self.layer_norm(trg)
-        src, trg = src[torch.arange(batch_size), src_eos], trg[torch.arange(batch_size), trg_eos]
+        src, trg = self.get_features(src, trg)
 
         src = F.normalize(self.src_wts(src))
         trg = F.normalize(self.trg_wts(trg))
-        sim_output = torch.mm(src, trg.transpose(0, 1)) * self.temperature.exp()
+        cos_sim = torch.mm(src, trg.transpose(0, 1))
+        sim_output = cos_sim * self.temperature.exp()
 
-        return sim_output, src, trg
+        return sim_output, src, trg, cos_sim

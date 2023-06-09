@@ -7,6 +7,7 @@ import time
 import pickle
 import random
 from tqdm import tqdm
+from scipy import stats
 
 from models.bert import BertClip
 from utils.utils_func import *
@@ -59,7 +60,7 @@ class Trainer:
             self.trainset, self.valset, self.testset = random_split(self.dataset, [train_size, val_size, test_size])
             self.dataset = {'train': self.trainset, 'val': self.valset, 'test': self.testset}
         else:
-            self.dataset = {s: DLoader(load_dataset(p), self.tokenizer, self.config) for s, p in self.config.dataset_path.items()}
+            self.dataset = {s: SemanticDLoader(load_dataset(p), self.tokenizer, self.config) for s, p in self.config.dataset_path.items()}
 
         if self.mode == 'train':
             self.dataloaders = {
@@ -140,13 +141,13 @@ class Trainer:
         self.model.train()
         total_loss = 0
 
-        for i, (src, trg) in enumerate(self.dataloaders[phase]):
+        for i, (src, trg, _) in enumerate(self.dataloaders[phase]):
             batch_size = src.size(0)
             self.optimizer.zero_grad()
             src, trg = src.to(self.device), trg.to(self.device)
 
             with torch.set_grad_enabled(phase=='train'):
-                sim_output, _, _ = self.model(src, trg)
+                sim_output, _, _, _ = self.model(src, trg)
 
                 label = torch.arange(batch_size).to(self.device)
                 loss = (self.chatbot_criterion(sim_output, label) + self.chatbot_criterion(sim_output.transpose(0, 1), label)) / 2
@@ -169,10 +170,10 @@ class Trainer:
 
         total_loss = 0
         with torch.no_grad():
-            for src, trg in tqdm(self.dataloaders[phase], desc=phase + ' inferencing..'):
+            for src, trg, _ in tqdm(self.dataloaders[phase], desc=phase + ' inferencing..'):
                 batch_size = src.size(0)
                 src, trg = src.to(self.device), trg.to(self.device)
-                sim_output, _, _ = self.model(src, trg)
+                sim_output, _, _, _ = self.model(src, trg)
                 
                 label = torch.arange(batch_size).to(self.device)
                 loss = (self.chatbot_criterion(sim_output, label) + self.chatbot_criterion(sim_output.transpose(0, 1), label)) / 2
@@ -192,12 +193,12 @@ class Trainer:
         all_txt, all_trg_txt, all_src_emb, all_trg_emb = [], [], [], []
 
         with torch.no_grad():
-            for src, trg in tqdm(self.dataloaders[phase], desc=phase + ' inferencing..'):
+            for src, trg, _ in tqdm(self.dataloaders[phase], desc=phase + ' inferencing..'):
                 all_txt += tensor2list(src, self.tokenizer)
                 all_trg_txt += tensor2list(trg, self.tokenizer)
                 
                 src, trg = src.to(self.device), trg.to(self.device)
-                _, src_emb, trg_emb = self.model(src, trg)
+                _, src_emb, trg_emb, _ = self.model(src, trg)
                 
                 all_trg_emb.append(trg_emb.detach().cpu())
                 all_src_emb.append(src_emb.detach().cpu())
@@ -215,7 +216,7 @@ class Trainer:
             s = s + [self.tokenizer.pad_token_id] * (self.max_len - len(s))
             s = torch.LongTensor(s).to(self.device).unsqueeze(0)
             
-            _, emb, _, = self.model(s, s)
+            _, emb, _, _ = self.model(s, s)
             sim = torch.mm(emb.detach().cpu(), all_trg_emb.transpose(0, 1))
             score, idx = torch.sort(sim.squeeze(), descending=True)
             score, idx = score[:topk], idx[:topk]
@@ -233,7 +234,7 @@ class Trainer:
             s = s + [self.tokenizer.pad_token_id] * (self.max_len - len(s))
             s = torch.LongTensor(s).to(self.device).unsqueeze(0)
             
-            _, emb, _, = self.model(s, s)
+            _, emb, _, _ = self.model(s, s)
             sim = torch.mm(emb.detach().cpu(), all_trg_emb.transpose(0, 1))# * self.model.temperature.exp()
             _, idx = torch.sort(sim.squeeze(), descending=True)
             idx = idx[:topk]
@@ -245,3 +246,27 @@ class Trainer:
         print('top1: {}'.format(top1_p / len(all_txt)))
         print('top5: {}'.format(top5_p / len(all_txt)))
         print('top10: {}'.format(top10_p / len(all_txt)))
+
+
+
+    def benchmark_test(self, phase):
+        self.model.eval()
+        all_cosSim, all_l = [], []
+
+        with torch.no_grad():
+            for src, trg, l in tqdm(self.dataloaders[phase], desc=phase + ' inferencing..'):
+                src, trg = src.to(self.device), trg.to(self.device)
+                _, _, _, cos_sim = self.model(src, trg)
+                cos_sim = torch.diagonal(cos_sim)
+                # l = (l / 5) * 2 - 1
+                
+                all_cosSim.append(cos_sim.detach().cpu())
+                all_l.append(l.detach().cpu())
+
+        all_cos = torch.cat(all_cosSim, dim=0).numpy()
+        all_l = torch.cat(all_l, dim=0).numpy()
+
+        res = stats.spearmanr(all_cos, all_l)
+        print(res.statistic)
+        print(all_cos[:10])
+        print(all_l[:10])

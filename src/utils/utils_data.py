@@ -72,7 +72,11 @@ class SemanticDLoader(Dataset):
     def __getitem__(self, idx):
         d = self.data[idx]
         s, t = self.tokenize_(d)
-        return torch.LongTensor(s), torch.LongTensor(t)
+        try:
+            label = self.data[idx][2]
+        except:
+            label = 0
+        return torch.LongTensor(s), torch.LongTensor(t), torch.tensor(label)
 
 
     def __len__(self):
