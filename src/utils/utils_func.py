@@ -88,3 +88,13 @@ def make_dataset_path(base_path, data_name):
     for split in ['train', 'val', 'test']:
         dataset_path[split] = base_path + 'data/' + data_name + '/processed/' + data_name + '.' + split
     return dataset_path
+
+
+def swtich_tensor(x, mask):
+    batch_size = x.size(0)
+    
+    mask = mask.unsqueeze(1)
+    mask = mask.repeat(1, batch_size)
+    mask = torch.where(mask == 0, -1, 1)
+
+    return x*mask
