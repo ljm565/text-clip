@@ -67,12 +67,12 @@ class Trainer:
                 s: DataLoader(d, self.batch_size, shuffle=True) if s == 'train' else DataLoader(d, self.batch_size, shuffle=False)
                     for s, d in self.dataset.items()}
         else:
-            tmp = 'test' if self.data_name != 'semantic' else 'val'
+            tmp = 'test' if not 'semantic' in self.data_name else 'val'
             self.dataloaders = {s: DataLoader(d, self.batch_size, shuffle=False) for s, d in self.dataset.items() if s == tmp}
 
         # model, optimizer, loss
         self.model = BertClip(self.config, self.tokenizer, self.device, isEng).to(self.device)
-        self.chatbot_criterion = nn.CrossEntropyLoss()
+        self.criterion = nn.CrossEntropyLoss()
     
         if self.mode == 'train':
             self.optimizer = optim.AdamW(self.model.parameters(), lr=self.lr)
@@ -97,7 +97,7 @@ class Trainer:
         val_loss_history = [] if not self.continuous else self.loss_data['val_loss_history']
         best_epoch_info = 0 if not self.continuous else self.loss_data['best_epoch']
 
-        steps = ['train', 'val'] if self.data_name == 'semantic' else ['train', 'val', 'test']
+        steps = ['train', 'val'] if 'semantic' in self.data_name else ['train', 'val', 'test']
         for epoch in range(self.epochs):
             start = time.time()
             print(epoch+1, '/', self.epochs)
@@ -141,16 +141,16 @@ class Trainer:
         self.model.train()
         total_loss = 0
 
-        for i, (src, trg, _) in enumerate(self.dataloaders[phase]):
+        for i, (src, trg, mask) in enumerate(self.dataloaders[phase]):
             batch_size = src.size(0)
             self.optimizer.zero_grad()
-            src, trg = src.to(self.device), trg.to(self.device)
+            src, trg, mask = src.to(self.device), trg.to(self.device), mask.to(self.device)
 
             with torch.set_grad_enabled(phase=='train'):
                 sim_output, _, _, _ = self.model(src, trg)
 
                 label = torch.arange(batch_size).to(self.device)
-                loss = (self.chatbot_criterion(sim_output, label) + self.chatbot_criterion(sim_output.transpose(0, 1), label)) / 2
+                loss = (self.criterion(switch_tensor(sim_output, mask), label) + self.criterion(switch_tensor(sim_output.transpose(0, 1), mask), label)) / 2
                 loss.backward()
                 self.optimizer.step()
 
@@ -170,13 +170,13 @@ class Trainer:
 
         total_loss = 0
         with torch.no_grad():
-            for src, trg, _ in tqdm(self.dataloaders[phase], desc=phase + ' inferencing..'):
+            for src, trg, mask in tqdm(self.dataloaders[phase], desc=phase + ' inferencing..'):
                 batch_size = src.size(0)
-                src, trg = src.to(self.device), trg.to(self.device)
+                src, trg, mask = src.to(self.device), trg.to(self.device), mask.to(self.device)
                 sim_output, _, _, _ = self.model(src, trg)
                 
                 label = torch.arange(batch_size).to(self.device)
-                loss = (self.chatbot_criterion(sim_output, label) + self.chatbot_criterion(sim_output.transpose(0, 1), label)) / 2
+                loss = (self.criterion(switch_tensor(sim_output, mask), label) + self.criterion(switch_tensor(sim_output.transpose(0, 1), mask), label)) / 2
 
                 total_loss += loss.item() * batch_size
 
