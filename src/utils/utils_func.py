@@ -90,7 +90,7 @@ def make_dataset_path(base_path, data_name):
     return dataset_path
 
 
-def swtich_tensor(x, mask):
+def switch_tensor(x, mask):
     batch_size = x.size(0)
     
     mask = mask.unsqueeze(1)
