@@ -85,6 +85,7 @@ def main(config_path:Config, args:ArgumentParser):
             json.dump(config.__dict__, f)
     
     if args.mode == 'benchmark':
+        del config.dataset_path['train']
         config.dataset_path['val'] = base_path + 'data/benchmark/' + args.benchmark + '/data.val'
 
     trainer = Trainer(config, device, args.mode, args.cont)

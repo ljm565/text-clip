@@ -38,8 +38,7 @@ class BertClip(nn.Module):
 
     def get_features(self, src, trg):
         if self.flag == 'eos':
-            src_eos, trg_eos = self.find_eos(src), self.find_eos(trg)
-            src, trg = src[torch.arange(self.batch_size), src_eos], trg[torch.arange(self.batch_size), trg_eos]
+            src, trg = src[torch.arange(self.batch_size), self.src_eos], trg[torch.arange(self.batch_size), self.trg_eos]
         elif self.flag == 'avg':
             hidden_dim = src.size(-1)
             self.src_mask, self.trg_mask = self.src_mask.unsqueeze(-1).repeat(1, 1, hidden_dim), self.trg_mask.unsqueeze(-1).repeat(1, 1, hidden_dim)
@@ -55,6 +54,7 @@ class BertClip(nn.Module):
     def forward(self, src, trg):
         self.batch_size = src.size(0)
         self.src_mask, self.trg_mask = self.make_mask(src), self.make_mask(trg)
+        self.src_eos, self.trg_eos = self.find_eos(src), self.find_eos(trg)
         
         src, trg = self.model(input_ids=src, attention_mask=self.src_mask)['last_hidden_state'], self.model(input_ids=trg, attention_mask=self.trg_mask)['last_hidden_state']
         src, trg = self.layer_norm(src), self.layer_norm(trg)
