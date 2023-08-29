@@ -175,7 +175,8 @@ class Trainer:
         print('clip training starts')
         self.model.train()
         total_loss = 0
-        for i, (src, trg, _) in enumerate(self.dataloaders[phase+'_clip']):
+        phase = phase+'_clip'
+        for i, (src, trg, _) in enumerate(self.dataloaders[phase]):
             batch_size = src.size(0)
             self.optimizer.zero_grad()
             src, trg = src.to(self.device), trg.to(self.device)
