@@ -73,6 +73,7 @@ class Trainer:
         # model, optimizer, losses
         self.model = BertClip(self.config, self.tokenizer, self.device).to(self.device)
         self.nli_loss = losses.SoftmaxLoss(self.model.hidden_dim, 3).to(self.device)
+        self.clip_loss = losses.ClipLoss(self.model.hidden_dim).to(self.device)
         if self.mode == 'train':
             self.optimizer = optim.AdamW(self.model.parameters(), lr=self.lr)
             if self.continuous:
@@ -109,6 +110,9 @@ class Trainer:
                         if task == 'nli':
                             nli_loss = self.nli_train(phase, epoch)
                             epoch_loss += nli_loss
+                        if task == 'clip':
+                            clip_loss = self.clip_train(phase, epoch)
+                            epoch_loss += clip_loss
                         # try:
                         #     epoch_loss = self.clip_train(phase, epoch)
                         # except KeyError:
@@ -127,8 +131,11 @@ class Trainer:
                     else:
                         epoch_loss = 0
                         if task == 'nli':
-                            nli_loss = self.nli_train(phase, epoch)
+                            nli_loss = self.nli_inference(phase, epoch)
                             epoch_loss += nli_loss
+                        if task == 'clip':
+                            clip_loss = self.clip_inference(phase, epoch)
+                            epoch_loss += clip_loss
                         # try:
                         #     epoch_loss = self.clip_inference(phase)
                         # except KeyError:
@@ -174,10 +181,9 @@ class Trainer:
             src, trg = src.to(self.device), trg.to(self.device)
 
             with torch.set_grad_enabled('train' in phase):
-                sim_output, _, _, _, _ = self.model(src, trg)
-
+                src, trg = self.model(src, trg)
                 label = torch.arange(batch_size).to(self.device)
-                loss = (self.clip_criterion(sim_output, label) + self.clip_criterion(sim_output.transpose(0, 1), label)) / 2
+                loss = self.clip_loss([src, trg], label)
                 loss.backward()
                 self.optimizer.step()
 
@@ -254,15 +260,12 @@ class Trainer:
             for src, trg, _ in tqdm(self.dataloaders[phase], desc=phase + ' inferencing..'):
                 batch_size = src.size(0)
                 src, trg = src.to(self.device), trg.to(self.device)
-                sim_output, _, _, _, _ = self.model(src, trg)
-                
+                src, trg = self.model(src, trg)
                 label = torch.arange(batch_size).to(self.device)
-                loss = (self.clip_criterion(sim_output, label) + self.clip_criterion(sim_output.transpose(0, 1), label)) / 2
-
+                loss = self.clip_loss([src, trg], label)
                 total_loss += loss.item() * batch_size
             
-            print('loss: {}'.format(total_loss/len(self.dataloaders[phase].dataset)))
-            print()
+            print('loss: {}\n'.format(total_loss/len(self.dataloaders[phase].dataset)))
             return total_loss/len(self.dataloaders[phase].dataset)
 
     
@@ -274,14 +277,10 @@ class Trainer:
             for src, trg, label in tqdm(self.dataloaders[phase], desc=phase + ' inferencing..'):
                 batch_size = src.size(0)
                 src, trg, label = src.to(self.device), trg.to(self.device), label.to(self.device)
-                _, _, _, _, nli = self.model(src, trg)
-                
-                loss = self.nli_criterion(nli, label)
-
+                src, trg = self.model(src, trg)
+                loss = self.nli_loss([src, trg], label)
                 total_loss += loss.item() * batch_size
-            
-            print('loss: {}'.format(total_loss/len(self.dataloaders[phase].dataset)))
-            print()
+            print('loss: {}\n'.format(total_loss/len(self.dataloaders[phase].dataset)))
             return total_loss/len(self.dataloaders[phase].dataset)
 
 
