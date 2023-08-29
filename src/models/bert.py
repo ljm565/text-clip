@@ -7,15 +7,14 @@ from transformers import BertModel
 
 
 class BertClip(nn.Module):
-    def __init__(self, config, tokenizer, device, ko=False):
+    def __init__(self, config, tokenizer, device):
         super(BertClip, self).__init__()
         self.tokenizer = tokenizer
         self.device = device
         self.flag = config.flag
         assert self.flag in ['eos', 'avg', 'max']
 
-        self.model = BertModel.from_pretrained('skt/kobert-base-v1') if ko \
-            else BertModel.from_pretrained('bert-base-uncased')
+        self.model = BertModel.from_pretrained('bert-base-uncased')
 
         self.hidden_dim = self.model.config.hidden_size
 

@@ -3,7 +3,6 @@
 
     "base_path": "./",
     "model_name": "nli_bert",
-    "loss_data_name": "nli_bert",
 
     "flag": "avg",
     "train_mode": ["nli"],

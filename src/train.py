@@ -41,7 +41,6 @@ class Trainer:
         self.base_path = self.config.base_path
         self.model_path = self.config.model_path
         self.data_name = self.config.data
-        isEng = False if self.data_name == 'koChat' else True
  
         # train params
         self.batch_size = self.config.batch_size
@@ -52,21 +51,15 @@ class Trainer:
         self.train_mode = self.config.train_mode
 
         # define tokenizer
-        self.tokenizer = Tokenizer(ko=isEng)
+        self.tokenizer = Tokenizer()
         self.config.vocab_size = self.tokenizer.vocab_size
         
         # dataloader
         if not self.mode == 'benchmark':
-            if self.data_name == 'koChat':
-                chatbot_data_path = os.path.join(*[self.base_path, 'data', self.data_name, 'processed', 'chatbot', 'all_data.pkl'])
-                self.dataset = DLoader(load_dataset(chatbot_data_path), self.tokenizer, self.config)
-                train_size, val_size = int(len(self.dataset) * 0.95), int(len(self.dataset) * 0.03)
-                test_size = len(self.dataset) - train_size - val_size
-                self.trainset, self.valset, self.testset = random_split(self.dataset, [train_size, val_size, test_size])
-                self.dataset = {'train': self.trainset, 'val': self.valset, 'test': self.testset}
-            else:
-                self.dataset = {split + '_' + m: SemanticDLoader(load_dataset(p), self.tokenizer, self.config) \
-                    for split, mode in self.config.dataset_path.items() for m, p in mode.items()}
+            self.dataset = {split + '_' + m: SemanticDLoader(load_dataset(p), self.tokenizer, self.config) \
+                for split, mode in self.config.dataset_path.items() for m, p in mode.items()}
+            print(self.dataset)
+            sfdsf
         else:
             self.dataset = {s: SemanticDLoader(load_dataset(p), self.tokenizer, self.config) for s, p in self.config.dataset_path.items()}
 
@@ -79,7 +72,7 @@ class Trainer:
             self.dataloaders = {s: DataLoader(d, self.batch_size, shuffle=False) for s, d in self.dataset.items() if tmp in s}
 
         # model, optimizer, loss
-        self.model = BertClip(self.config, self.tokenizer, self.device, isEng).to(self.device)
+        self.model = BertClip(self.config, self.tokenizer, self.device).to(self.device)
         self.clip_criterion = nn.CrossEntropyLoss()
         self.nli_criterion = nn.CrossEntropyLoss()
         self.reg_criterion = nn.SmoothL1Loss()

@@ -93,19 +93,16 @@ def isInTopk(gt_id, selected_id, topk):
     return 0
 
 
-def make_dataset_path(base_path, data_name, train_mode=None):
+def make_dataset_path(base_path, data_name, train_mode):
     dataset_path = {}
-    d_path = base_path + 'data/' + data_name + '/processed/'
-    phase = list(set([file[file.rfind('.')+1:] for file in os.listdir(d_path)]))
+    d_path = base_path + 'data/' + data_name + '/'
+    phase = ['train', 'val']
 
     for split in phase:
-        if train_mode == None:
-            dataset_path[split] = d_path + data_name + '.' + split
-        else:
-            dataset_path[split] = {}
-            for mode in train_mode:
-                dataset_path[split][mode] = d_path + 'semantic' + '_' + mode + '.' + split
-    
+        dataset_path[split] = {}
+        for mode in train_mode:
+            dataset_path[split][mode] = os.path.join(*[d_path, split, mode+'.'+split])
+            
     return dataset_path
 
 
