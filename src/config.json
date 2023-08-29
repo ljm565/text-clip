@@ -4,8 +4,8 @@
     "base_path": "./",
     "model_name": "nli_bert",
 
-    "flag": "avg",
-    "train_mode": ["nli", "clip"],
+    "flag": "cls",
+    "train_mode": ["nli"],
 
     "max_len": 128,
     "layernorm_eps": 1e-06,

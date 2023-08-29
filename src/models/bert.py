@@ -12,16 +12,16 @@ class BertClip(nn.Module):
         self.tokenizer = tokenizer
         self.device = device
         self.flag = config.flag
-        assert self.flag in ['eos', 'avg', 'max']
+        assert self.flag in ['cls', 'eos', 'avg', 'max']
 
         self.model = BertModel.from_pretrained('bert-base-uncased')
 
         self.hidden_dim = self.model.config.hidden_size
 
-        self.layer_norm = nn.LayerNorm(self.hidden_dim, eps=config.layernorm_eps)
-        self.src_wts = nn.Linear(self.hidden_dim, self.hidden_dim)
-        self.trg_wts = nn.Linear(self.hidden_dim, self.hidden_dim)
-        self.temperature = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
+        # self.layer_norm = nn.LayerNorm(self.hidden_dim, eps=config.layernorm_eps)
+        # self.src_wts = nn.Linear(self.hidden_dim, self.hidden_dim)
+        # self.trg_wts = nn.Linear(self.hidden_dim, self.hidden_dim)
+        # self.temperature = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
 
         #self.nli_layer = nn.Sequential(
         #    nn.Linear(768*3, 3)
@@ -45,7 +45,9 @@ class BertClip(nn.Module):
     
 
     def get_features(self, src, trg):
-        if self.flag == 'eos':
+        if self.flag == 'cls':
+            src, trg = src[:, 0], trg[:, 0]
+        elif self.flag == 'eos':
             src_eos, trg_eos = self.find_eos(src), self.find_eos(trg)
             src, trg = src[torch.arange(self.batch_size), src_eos], trg[torch.arange(self.batch_size), trg_eos]
         elif self.flag == 'avg':
@@ -65,15 +67,16 @@ class BertClip(nn.Module):
         self.src_mask, self.trg_mask = self.make_mask(src), self.make_mask(trg)
         
         src, trg = self.model(input_ids=src, attention_mask=self.src_mask)['last_hidden_state'], self.model(input_ids=trg, attention_mask=self.trg_mask)['last_hidden_state']
-        src, trg = self.layer_norm(src), self.layer_norm(trg)
+        # src, trg = self.layer_norm(src), self.layer_norm(trg)
         src, trg = self.get_features(src, trg)
-        src, trg = self.src_wts(src), self.trg_wts(trg)
+        # src, trg = self.src_wts(src), self.trg_wts(trg)
 
-        src = F.normalize(src)
-        trg = F.normalize(trg)
-        cos_sim = torch.mm(src, trg.transpose(0, 1))
+        # src = F.normalize(src)
+        # trg = F.normalize(trg)
+        # cos_sim = torch.mm(src, trg.transpose(0, 1))
 
-        nli = 0 #self.nli_layer(cos_sim[torch.arange(self.batch_size), torch.arange(self.batch_size)].unsqueeze(1))
-        sim_output = cos_sim * self.temperature.exp()
+        # nli = 0 #self.nli_layer(cos_sim[torch.arange(self.batch_size), torch.arange(self.batch_size)].unsqueeze(1))
+        # sim_output = cos_sim * self.temperature.exp()
 
-        return sim_output, src, trg, cos_sim, nli
+        # return sim_output, src, trg, cos_sim, nli
+        return src, trg

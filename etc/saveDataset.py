@@ -215,7 +215,7 @@ def save_reg_data(phase, dataset, path):
 if __name__ == '__main__':
     trainset, valset, testset = init_data()
     
-    path = './data/'
+    path = './data/semantic/'
     for mode in ['clip', 'nli', 'reg']:
         for phase in ['train', 'val']:
             if phase == 'train':

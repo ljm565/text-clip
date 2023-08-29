@@ -16,6 +16,7 @@ from utils.utils_func import *
 from tokenizer import Tokenizer
 from utils.config import Config
 from utils.utils_data import DLoader, SemanticDLoader
+import losses
 
 
 
@@ -59,7 +60,6 @@ class Trainer:
             self.dataset = {split + '_' + m: SemanticDLoader(load_dataset(p), self.tokenizer, self.config) \
                 for split, mode in self.config.dataset_path.items() for m, p in mode.items()}
             print(self.dataset)
-            sfdsf
         else:
             self.dataset = {s: SemanticDLoader(load_dataset(p), self.tokenizer, self.config) for s, p in self.config.dataset_path.items()}
 
@@ -71,12 +71,9 @@ class Trainer:
             tmp = 'test' if not 'semantic' in self.data_name else 'val'
             self.dataloaders = {s: DataLoader(d, self.batch_size, shuffle=False) for s, d in self.dataset.items() if tmp in s}
 
-        # model, optimizer, loss
+        # model, optimizer, losses
         self.model = BertClip(self.config, self.tokenizer, self.device).to(self.device)
-        self.clip_criterion = nn.CrossEntropyLoss()
-        self.nli_criterion = nn.CrossEntropyLoss()
-        self.reg_criterion = nn.SmoothL1Loss()
-    
+        self.nli_loss = losses.SoftmaxLoss(self.model.hidden_dim, 3)
         if self.mode == 'train':
             self.optimizer = optim.AdamW(self.model.parameters(), lr=self.lr)
             if self.continuous:
@@ -106,48 +103,57 @@ class Trainer:
             print(epoch+1, '/', self.epochs)
             print('-'*10)
             for phase in steps:
-                print('Phase: {}'.format(phase))
-                if phase == 'train':
-                    try:
-                        epoch_loss = self.clip_train(phase, epoch)
-                    except KeyError:
+                for task in self.train_mode:
+                    print('Phase/mode: {}/{}'.format(phase, task))
+                    if phase == 'train':
                         epoch_loss = 0
-                        for mode in self.train_mode:
-                            if mode == 'clip':
-                                loss1 = self.clip_train(phase + '_clip', epoch)
-                                epoch_loss += loss1
-                            elif mode == 'nli':
-                                loss2 = self.nli_train(phase + '_nli', epoch)
-                                epoch_loss += loss2
-                            elif mode == 'reg':
-                                loss3 = self.reg_train(phase + '_reg', epoch)
-                                epoch_loss += loss3
-                        # epoch_loss = loss1 + loss2 + loss3
-                else:
-                    try:
-                        epoch_loss = self.clip_inference(phase)
-                    except KeyError:
+                        if task == 'nli':
+                            nli_loss = self.nli_train(phase, epoch)
+                            epoch_loss += nli_loss
+                        # try:
+                        #     epoch_loss = self.clip_train(phase, epoch)
+                        # except KeyError:
+                        #     epoch_loss = 0
+                        #     for mode in self.train_mode:
+                        #         if mode == 'clip':
+                        #             loss1 = self.clip_train(phase + '_clip', epoch)
+                        #             epoch_loss += loss1
+                        #         elif mode == 'nli':
+                        #             loss2 = self.nli_train(phase + '_nli', epoch)
+                        #             epoch_loss += loss2
+                        #         elif mode == 'reg':
+                        #             loss3 = self.reg_train(phase + '_reg', epoch)
+                        #             epoch_loss += loss3
+                        #     # epoch_loss = loss1 + loss2 + loss3
+                    else:
                         epoch_loss = 0
-                        for mode in self.train_mode:
-                            if mode == 'clip':
-                                loss1 = self.clip_inference(phase + '_clip')
-                                epoch_loss += loss1
-                            elif mode == 'nli':
-                                loss2 = self.nli_inference(phase + '_nli')
-                                epoch_loss += loss2
-                            elif mode == 'reg':
-                                loss3 = self.reg_inference(phase + '_reg')
-                                epoch_loss += loss3
-                        # loss = loss1 + loss2 + loss3
+                        if task == 'nli':
+                            nli_loss = self.nli_train(phase, epoch)
+                            epoch_loss += nli_loss
+                        # try:
+                        #     epoch_loss = self.clip_inference(phase)
+                        # except KeyError:
+                        #     epoch_loss = 0
+                        #     for mode in self.train_mode:
+                        #         if mode == 'clip':
+                        #             loss1 = self.clip_inference(phase + '_clip')
+                        #             epoch_loss += loss1
+                        #         elif mode == 'nli':
+                        #             loss2 = self.nli_inference(phase + '_nli')
+                        #             epoch_loss += loss2
+                        #         elif mode == 'reg':
+                        #             loss3 = self.reg_inference(phase + '_reg')
+                        #             epoch_loss += loss3
+                        #     # loss = loss1 + loss2 + loss3
 
-                    if phase == 'val':
-                        # save best model
-                        early_stop += 1
-                        if  epoch_loss < best_val_loss:
-                            early_stop = 0
-                            best_val_loss = epoch_loss
-                            best_epoch = epoch + 1
-                            save_checkpoint(self.model_path, self.model, self.optimizer)
+                        if phase == 'val':
+                            # save best model
+                            early_stop += 1
+                            if  epoch_loss < best_val_loss:
+                                early_stop = 0
+                                best_val_loss = epoch_loss
+                                best_epoch = epoch + 1
+                                save_checkpoint(self.model_path, self.model, self.optimizer)
                             
             print("time: {} s\n".format(time.time() - start))
             print('\n'*2)
@@ -163,7 +169,7 @@ class Trainer:
         print('clip training starts')
         self.model.train()
         total_loss = 0
-        for i, (src, trg, _) in enumerate(self.dataloaders[phase]):
+        for i, (src, trg, _) in enumerate(self.dataloaders[phase+'_clip']):
             batch_size = src.size(0)
             self.optimizer.zero_grad()
             src, trg = src.to(self.device), trg.to(self.device)
@@ -191,15 +197,14 @@ class Trainer:
         print('nli training starts')
         self.model.train()
         total_loss = 0
-        for i, (src, trg, label) in enumerate(self.dataloaders[phase]):
+        for i, (src, trg, label) in enumerate(self.dataloaders[phase+'_nli']):
             batch_size = src.size(0)
             self.optimizer.zero_grad()
             src, trg, label = src.to(self.device), trg.to(self.device), label.to(self.device)
 
             with torch.set_grad_enabled('train' in phase):
-                _, _, _, _, nli = self.model(src, trg)
-
-                loss = self.nli_criterion(nli, label)
+                src, trg = self.model(src, trg)
+                loss = self.nli_loss([src, trg], label)
                 loss.backward()
                 self.optimizer.step()
 
