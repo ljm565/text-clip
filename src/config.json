@@ -5,7 +5,7 @@
     "model_name": "nli_bert",
 
     "flag": "avg",
-    "train_mode": ["nli"],
+    "train_mode": ["nli", "clip"],
 
     "max_len": 128,
     "layernorm_eps": 1e-06,

@@ -5,5 +5,4 @@ loss/
 .DS_Store
 data/
 logs/
-etc/
 old/

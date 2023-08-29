@@ -9,7 +9,7 @@ import pickle
 import random
 from tqdm import tqdm
 from scipy import stats
-from sentence_transformers import SentenceTransformer
+# from sentence_transformers import SentenceTransformer
 
 from models.bert import BertClip
 from utils.utils_func import *
@@ -100,7 +100,7 @@ class Trainer:
         early_stop = 0
         best_val_loss = float('inf')
 
-        steps = ['train', 'val'] if 'semantic' in self.data_name else ['train', 'val', 'test']
+        steps = ['train', 'val']
         for epoch in range(self.epochs):
             start = time.time()
             print(epoch+1, '/', self.epochs)

@@ -42,9 +42,7 @@ def main(config_path:Config, args:ArgumentParser):
 
         # make neccessary folders
         os.makedirs(base_path + 'model', exist_ok=True)
-        os.makedirs(base_path + 'loss', exist_ok=True)
         os.makedirs(base_path + 'logs', exist_ok=True)
-        os.makedirs(base_path + 'data/' + data_name + '/processed', exist_ok=True)
 
         # define dataset path
         config.dataset_path = make_dataset_path(base_path, data_name, config.train_mode)
