@@ -73,7 +73,7 @@ class Trainer:
         # model, optimizer, losses
         self.model = BertClip(self.config, self.tokenizer, self.device).to(self.device)
         self.nli_loss = losses.SoftmaxLoss(self.model.hidden_dim, 3).to(self.device)
-        self.clip_loss = losses.ClipLoss(self.model.hidden_dim).to(self.device)
+        self.clip_loss = losses.ClipLoss().to(self.device)
         if self.mode == 'train':
             self.optimizer = optim.AdamW(self.model.parameters(), lr=self.lr)
             if self.continuous:
