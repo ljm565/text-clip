@@ -24,6 +24,15 @@ class BertClip(nn.Module):
         self.trg_wts = nn.Linear(self.hidden_dim, self.hidden_dim)
         self.temperature = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
 
+        #self.nli_layer = nn.Sequential(
+        #    nn.Linear(768*3, 3)
+        #)
+
+        #self.reg_layer = nn.Sequential(
+        #    nn.Linear(self.hidden_dim, 1),
+        #    nn.Sigmoid()
+        #)
+
 
     def make_mask(self, x):
         mask = torch.where(x==self.tokenizer.pad_token_id, 0, 1)
@@ -59,10 +68,13 @@ class BertClip(nn.Module):
         src, trg = self.model(input_ids=src, attention_mask=self.src_mask)['last_hidden_state'], self.model(input_ids=trg, attention_mask=self.trg_mask)['last_hidden_state']
         src, trg = self.layer_norm(src), self.layer_norm(trg)
         src, trg = self.get_features(src, trg)
+        src, trg = self.src_wts(src), self.trg_wts(trg)
 
-        src = F.normalize(self.src_wts(src))
-        trg = F.normalize(self.trg_wts(trg))
+        src = F.normalize(src)
+        trg = F.normalize(trg)
         cos_sim = torch.mm(src, trg.transpose(0, 1))
+
+        nli = 0 #self.nli_layer(cos_sim[torch.arange(self.batch_size), torch.arange(self.batch_size)].unsqueeze(1))
         sim_output = cos_sim * self.temperature.exp()
 
-        return sim_output, src, trg, cos_sim
+        return sim_output, src, trg, cos_sim, nli

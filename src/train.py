@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.data import DataLoader, random_split
 
@@ -8,6 +9,7 @@ import pickle
 import random
 from tqdm import tqdm
 from scipy import stats
+from sentence_transformers import SentenceTransformer
 
 from models.bert import BertClip
 from utils.utils_func import *
@@ -20,13 +22,14 @@ from utils.utils_data import DLoader, SemanticDLoader
 
 
 class Trainer:
-    def __init__(self, config:Config, device:torch.device, mode:str, continuous:int):
+    def __init__(self, config:Config, device:torch.device, mode:str, continuous:int, isSBERT:bool=False):
         torch.manual_seed(999)  # for reproducibility
 
         self.config = config
         self.device = device
         self.mode = mode
         self.continuous = continuous
+        self.isSBERT = isSBERT
         self.dataloaders = {}
 
         # if continuous, load previous training info
@@ -46,33 +49,40 @@ class Trainer:
         self.lr = self.config.lr
         self.max_len = self.config.max_len
         self.result_num = self.config.result_num
+        self.train_mode = self.config.train_mode
 
         # define tokenizer
         self.tokenizer = Tokenizer(ko=isEng)
         self.config.vocab_size = self.tokenizer.vocab_size
         
         # dataloader
-        if self.data_name == 'koChat':
-            chatbot_data_path = os.path.join(*[self.base_path, 'data', self.data_name, 'processed', 'chatbot', 'all_data.pkl'])
-            self.dataset = DLoader(load_dataset(chatbot_data_path), self.tokenizer, self.config)
-            train_size, val_size = int(len(self.dataset) * 0.95), int(len(self.dataset) * 0.03)
-            test_size = len(self.dataset) - train_size - val_size
-            self.trainset, self.valset, self.testset = random_split(self.dataset, [train_size, val_size, test_size])
-            self.dataset = {'train': self.trainset, 'val': self.valset, 'test': self.testset}
+        if not self.mode == 'benchmark':
+            if self.data_name == 'koChat':
+                chatbot_data_path = os.path.join(*[self.base_path, 'data', self.data_name, 'processed', 'chatbot', 'all_data.pkl'])
+                self.dataset = DLoader(load_dataset(chatbot_data_path), self.tokenizer, self.config)
+                train_size, val_size = int(len(self.dataset) * 0.95), int(len(self.dataset) * 0.03)
+                test_size = len(self.dataset) - train_size - val_size
+                self.trainset, self.valset, self.testset = random_split(self.dataset, [train_size, val_size, test_size])
+                self.dataset = {'train': self.trainset, 'val': self.valset, 'test': self.testset}
+            else:
+                self.dataset = {split + '_' + m: SemanticDLoader(load_dataset(p), self.tokenizer, self.config) \
+                    for split, mode in self.config.dataset_path.items() for m, p in mode.items()}
         else:
             self.dataset = {s: SemanticDLoader(load_dataset(p), self.tokenizer, self.config) for s, p in self.config.dataset_path.items()}
 
         if self.mode == 'train':
             self.dataloaders = {
-                s: DataLoader(d, self.batch_size, shuffle=True) if s == 'train' else DataLoader(d, self.batch_size, shuffle=False)
+                s: DataLoader(d, self.batch_size, shuffle=True) if 'train' in s else DataLoader(d, self.batch_size, shuffle=False)
                     for s, d in self.dataset.items()}
         else:
-            tmp = 'test' if self.data_name != 'semantic' else 'val'
-            self.dataloaders = {s: DataLoader(d, self.batch_size, shuffle=False) for s, d in self.dataset.items() if s == tmp}
+            tmp = 'test' if not 'semantic' in self.data_name else 'val'
+            self.dataloaders = {s: DataLoader(d, self.batch_size, shuffle=False) for s, d in self.dataset.items() if tmp in s}
 
         # model, optimizer, loss
         self.model = BertClip(self.config, self.tokenizer, self.device, isEng).to(self.device)
-        self.chatbot_criterion = nn.CrossEntropyLoss()
+        self.clip_criterion = nn.CrossEntropyLoss()
+        self.nli_criterion = nn.CrossEntropyLoss()
+        self.reg_criterion = nn.SmoothL1Loss()
     
         if self.mode == 'train':
             self.optimizer = optim.AdamW(self.model.parameters(), lr=self.lr)
@@ -83,21 +93,21 @@ class Trainer:
                 del self.check_point
                 torch.cuda.empty_cache()
         else:
-            self.check_point = torch.load(self.model_path, map_location=self.device)
-            self.model.load_state_dict(self.check_point['model'])    
-            self.model.eval()
-            del self.check_point
-            torch.cuda.empty_cache()
+            if self.isSBERT:
+                self.model = SentenceTransformer('all-mpnet-base-v2', device=self.device)
+            else:
+                self.check_point = torch.load(self.model_path, map_location=self.device)
+                self.model.load_state_dict(self.check_point['model'])    
+                self.model.eval()
+                del self.check_point
+                torch.cuda.empty_cache()
 
         
     def training(self):
         early_stop = 0
         best_val_loss = float('inf')
-        train_loss_history = [] if not self.continuous else self.loss_data['train_loss_history']
-        val_loss_history = [] if not self.continuous else self.loss_data['val_loss_history']
-        best_epoch_info = 0 if not self.continuous else self.loss_data['best_epoch']
 
-        steps = ['train', 'val'] if self.data_name == 'semantic' else ['train', 'val', 'test']
+        steps = ['train', 'val'] if 'semantic' in self.data_name else ['train', 'val', 'test']
         for epoch in range(self.epochs):
             start = time.time()
             print(epoch+1, '/', self.epochs)
@@ -105,26 +115,47 @@ class Trainer:
             for phase in steps:
                 print('Phase: {}'.format(phase))
                 if phase == 'train':
-                    epoch_loss = self.train(phase, epoch)
-                    train_loss_history.append(epoch_loss)
+                    try:
+                        epoch_loss = self.clip_train(phase, epoch)
+                    except KeyError:
+                        epoch_loss = 0
+                        for mode in self.train_mode:
+                            if mode == 'clip':
+                                loss1 = self.clip_train(phase + '_clip', epoch)
+                                epoch_loss += loss1
+                            elif mode == 'nli':
+                                loss2 = self.nli_train(phase + '_nli', epoch)
+                                epoch_loss += loss2
+                            elif mode == 'reg':
+                                loss3 = self.reg_train(phase + '_reg', epoch)
+                                epoch_loss += loss3
+                        # epoch_loss = loss1 + loss2 + loss3
                 else:
-                    loss = self.inference(phase)
-                    if phase == 'val':
-                        val_loss_history.append(loss)
+                    try:
+                        epoch_loss = self.clip_inference(phase)
+                    except KeyError:
+                        epoch_loss = 0
+                        for mode in self.train_mode:
+                            if mode == 'clip':
+                                loss1 = self.clip_inference(phase + '_clip')
+                                epoch_loss += loss1
+                            elif mode == 'nli':
+                                loss2 = self.nli_inference(phase + '_nli')
+                                epoch_loss += loss2
+                            elif mode == 'reg':
+                                loss3 = self.reg_inference(phase + '_reg')
+                                epoch_loss += loss3
+                        # loss = loss1 + loss2 + loss3
 
+                    if phase == 'val':
                         # save best model
                         early_stop += 1
-                        if  loss < best_val_loss:
+                        if  epoch_loss < best_val_loss:
                             early_stop = 0
-                            best_val_loss = loss
-                            best_epoch = best_epoch_info + epoch + 1
+                            best_val_loss = epoch_loss
+                            best_epoch = epoch + 1
                             save_checkpoint(self.model_path, self.model, self.optimizer)
                             
-                            self.loss_data = {'best_epoch': best_epoch, 'best_val_loss': best_val_loss, 'train_loss_history': train_loss_history, 'val_loss_history': val_loss_history}
-                            print('Saving the loss related data...')
-                            with open(self.config.loss_data_path, 'wb') as f:
-                                pickle.dump(self.loss_data, f)
-
             print("time: {} s\n".format(time.time() - start))
             print('\n'*2)
 
@@ -133,24 +164,22 @@ class Trainer:
                 break
 
         print('best val loss: {:4f}, best epoch: {:d}\n'.format(best_val_loss, best_epoch))
-        self.loss_data = {'best_epoch': best_epoch, 'best_val_loss': best_val_loss, 'train_loss_history': train_loss_history, 'val_loss_history': val_loss_history}
-        return self.loss_data
 
 
-    def train(self, phase, epoch):
+    def clip_train(self, phase, epoch):
+        print('clip training starts')
         self.model.train()
         total_loss = 0
-
         for i, (src, trg, _) in enumerate(self.dataloaders[phase]):
             batch_size = src.size(0)
             self.optimizer.zero_grad()
             src, trg = src.to(self.device), trg.to(self.device)
 
-            with torch.set_grad_enabled(phase=='train'):
-                sim_output, _, _, _ = self.model(src, trg)
+            with torch.set_grad_enabled('train' in phase):
+                sim_output, _, _, _, _ = self.model(src, trg)
 
                 label = torch.arange(batch_size).to(self.device)
-                loss = (self.chatbot_criterion(sim_output, label) + self.chatbot_criterion(sim_output.transpose(0, 1), label)) / 2
+                loss = (self.clip_criterion(sim_output, label) + self.clip_criterion(sim_output.transpose(0, 1), label)) / 2
                 loss.backward()
                 self.optimizer.step()
 
@@ -158,14 +187,68 @@ class Trainer:
 
             if i % 1000 == 0:
                 print('Epoch {}: {}/{} step loss: {}'.format(epoch+1, i, len(self.dataloaders[phase]), loss.item()))
+            
+        epoch_loss = total_loss / len(self.dataloaders[phase].dataset)
 
+        print('{} loss: {} \n'.format(phase, epoch_loss))
+        return epoch_loss
+
+    
+    def nli_train(self, phase, epoch):
+        print('nli training starts')
+        self.model.train()
+        total_loss = 0
+        for i, (src, trg, label) in enumerate(self.dataloaders[phase]):
+            batch_size = src.size(0)
+            self.optimizer.zero_grad()
+            src, trg, label = src.to(self.device), trg.to(self.device), label.to(self.device)
+
+            with torch.set_grad_enabled('train' in phase):
+                _, _, _, _, nli = self.model(src, trg)
+
+                loss = self.nli_criterion(nli, label)
+                loss.backward()
+                self.optimizer.step()
+
+            total_loss +=  loss.item() * batch_size
+
+            if i % 1000 == 0:
+                print('Epoch {}: {}/{} step loss: {}'.format(epoch+1, i, len(self.dataloaders[phase]), loss.item()))
+            
         epoch_loss = total_loss / len(self.dataloaders[phase].dataset)
 
         print('{} loss: {} \n'.format(phase, epoch_loss))
         return epoch_loss
 
 
-    def inference(self, phase):
+    def reg_train(self, phase, epoch):
+        print('regression training starts')
+        self.model.train()
+        total_loss = 0
+        for i, (src, trg, label) in enumerate(self.dataloaders[phase]):
+            batch_size = src.size(0)
+            self.optimizer.zero_grad()
+            src, trg, label = src.to(self.device), trg.to(self.device), label.to(self.device)
+            
+            with torch.set_grad_enabled('train' in phase):
+                _, _, _, cos_sim, _ = self.model(src, trg)
+
+                loss = self.reg_criterion(cos_sim[torch.arange(batch_size), torch.arange(batch_size)], label)
+                loss.backward()
+                self.optimizer.step()
+
+            total_loss +=  loss.item() * batch_size
+            
+            if i % 1000 == 0:
+                print('Epoch {}: {}/{} step loss: {}'.format(epoch+1, i, len(self.dataloaders[phase]), loss.item()))
+            
+        epoch_loss = total_loss / len(self.dataloaders[phase].dataset)
+
+        print('{} loss: {} \n'.format(phase, epoch_loss))
+        return epoch_loss
+
+
+    def clip_inference(self, phase):
         self.model.eval()
 
         total_loss = 0
@@ -173,18 +256,54 @@ class Trainer:
             for src, trg, _ in tqdm(self.dataloaders[phase], desc=phase + ' inferencing..'):
                 batch_size = src.size(0)
                 src, trg = src.to(self.device), trg.to(self.device)
-                sim_output, _, _, _ = self.model(src, trg)
+                sim_output, _, _, _, _ = self.model(src, trg)
                 
                 label = torch.arange(batch_size).to(self.device)
-                loss = (self.chatbot_criterion(sim_output, label) + self.chatbot_criterion(sim_output.transpose(0, 1), label)) / 2
+                loss = (self.clip_criterion(sim_output, label) + self.clip_criterion(sim_output.transpose(0, 1), label)) / 2
 
                 total_loss += loss.item() * batch_size
+            
+            print('loss: {}'.format(total_loss/len(self.dataloaders[phase].dataset)))
+            print()
+            return total_loss/len(self.dataloaders[phase].dataset)
+
+    
+    def nli_inference(self, phase):
+        self.model.eval()
+
+        total_loss = 0
+        with torch.no_grad():
+            for src, trg, label in tqdm(self.dataloaders[phase], desc=phase + ' inferencing..'):
+                batch_size = src.size(0)
+                src, trg, label = src.to(self.device), trg.to(self.device), label.to(self.device)
+                _, _, _, _, nli = self.model(src, trg)
+                
+                loss = self.nli_criterion(nli, label)
+
+                total_loss += loss.item() * batch_size
+            
+            print('loss: {}'.format(total_loss/len(self.dataloaders[phase].dataset)))
+            print()
+            return total_loss/len(self.dataloaders[phase].dataset)
 
 
-        print('\nInference Result')
-        print('loss: {}'.format(total_loss/len(self.dataloaders[phase].dataset)))
+    def reg_inference(self, phase):
+        self.model.eval()
 
-        return total_loss/len(self.dataloaders[phase].dataset)
+        total_loss = 0
+        with torch.no_grad():
+            for src, trg, label in tqdm(self.dataloaders[phase], desc=phase + ' inferencing..'):
+                batch_size = src.size(0)
+                src, trg, label = src.to(self.device), trg.to(self.device), label.to(self.device)
+                _, _, _, cos_sim, _ = self.model(src, trg)
+                
+                loss = self.reg_criterion(cos_sim[torch.arange(batch_size), torch.arange(batch_size)], label)
+
+                total_loss += loss.item() * batch_size
+            
+            print('loss: {}'.format(total_loss/len(self.dataloaders[phase].dataset)))
+            print()
+            return total_loss/len(self.dataloaders[phase].dataset)
 
 
     def test(self, phase):
@@ -255,9 +374,15 @@ class Trainer:
 
         with torch.no_grad():
             for src, trg, l in tqdm(self.dataloaders[phase], desc=phase + ' inferencing..'):
-                src, trg = src.to(self.device), trg.to(self.device)
-                _, _, _, cos_sim = self.model(src, trg)
-                cos_sim = torch.diagonal(cos_sim)
+                if self.isSBERT:
+                    src, trg = src.to(self.device), trg.to(self.device)
+                    src, trg = [self.tokenizer.decode(s.tolist()) for s in src], [self.tokenizer.decode(s.tolist()) for s in trg]
+                    src_emb, trg_emb = torch.from_numpy(self.model.encode(src)), torch.from_numpy(self.model.encode(trg))
+                    cos_sim = torch.diagonal(torch.mm(src_emb, trg_emb.transpose(0, 1)))
+                else:
+                    src, trg = src.to(self.device), trg.to(self.device)
+                    _, _, _, cos_sim, _ = self.model(src, trg)
+                    cos_sim = torch.diagonal(cos_sim)
                 # l = (l / 5) * 2 - 1
                 
                 all_cosSim.append(cos_sim.detach().cpu())

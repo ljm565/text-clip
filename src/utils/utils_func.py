@@ -4,6 +4,7 @@ import os
 import pickle
 import random
 from tqdm import tqdm
+import pandas as pd
 
 
 
@@ -53,8 +54,17 @@ def make_vocab_file(data, data_save_path, special_token_save_path):
 
 
 def load_dataset(path):
-    with open(path, 'rb') as f:
-        data = pickle.load(f)
+    try:
+        with open(path, 'rb') as f:
+            data = pickle.load(f)
+    except:
+        data = pd.read_csv(path, delimiter='\t', header=None, keep_default_na=False)
+        try:
+            s1, s2, s3 = data.iloc[:, 0].tolist(), data.iloc[:, 1].tolist(), data.iloc[:, 2].tolist()
+            data = [(ss1, ss2, ss3) for ss1, ss2, ss3 in zip(s1, s2, s3)]
+        except IndexError:
+            s1, s2 = data.iloc[:, 0].tolist(), data.iloc[:, 1].tolist()
+            data = [(ss1, ss2) for ss1, ss2 in zip(s1, s2)]
     return data
 
 
@@ -83,18 +93,27 @@ def isInTopk(gt_id, selected_id, topk):
     return 0
 
 
-def make_dataset_path(base_path, data_name):
+def make_dataset_path(base_path, data_name, train_mode=None):
     dataset_path = {}
-    for split in ['train', 'val', 'test']:
-        dataset_path[split] = base_path + 'data/' + data_name + '/processed/' + data_name + '.' + split
+    d_path = base_path + 'data/' + data_name + '/processed/'
+    phase = list(set([file[file.rfind('.')+1:] for file in os.listdir(d_path)]))
+
+    for split in phase:
+        if train_mode == None:
+            dataset_path[split] = d_path + data_name + '.' + split
+        else:
+            dataset_path[split] = {}
+            for mode in train_mode:
+                dataset_path[split][mode] = d_path + 'semantic' + '_' + mode + '.' + split
+    
     return dataset_path
 
 
-def swtich_tensor(x, mask):
-    batch_size = x.size(0)
+# def switch_tensor(x, mask):
+#     batch_size = x.size(0)
     
-    mask = mask.unsqueeze(1)
-    mask = mask.repeat(1, batch_size)
-    mask = torch.where(mask == 0, -1, 1)
+#     mask = mask.unsqueeze(1)
+#     mask = mask.repeat(1, batch_size)
+#     mask = torch.where(mask == 0, -1, 1)
 
-    return x*mask
+#     return x*mask

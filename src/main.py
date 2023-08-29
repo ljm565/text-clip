@@ -13,13 +13,24 @@ from utils.utils_func import collect_all_data, make_vocab_file, make_dataset_pat
 
 
 def main(config_path:Config, args:ArgumentParser):
-    device = torch.device('cuda:0') if args.device == 'gpu' else torch.device('cpu')
+    if args.device == 'cpu':
+        device = torch.device('cpu')
+    elif 'gpu' in args.device:
+        device = torch.device('cuda:0') if args.device == 'gpu' else torch.device(f'cuda:{args.device[3:]}')
+    else:
+        raise AssertionError('Please check the device')
     print('Using {}'.format(device))
 
+    isSBERT = False
     if (args.cont and args.mode == 'train') or args.mode != 'train':
         try:
+            isSBERT = True if args.name.lower() == 'sbert' else False
             config = Config(config_path)
-            config = Config(config.base_path + '/model/' + args.name + '/' + args.name + '.json')
+            if not isSBERT:
+                config = Config(config.base_path + '/model/' + args.name + '/' + args.name + '.json')
+            else:
+                config.dataset_path = {'train': None, 'val': None}
+                config.model_path = None
             base_path = config.base_path
         except:
             print('*'*36)
@@ -64,7 +75,7 @@ def main(config_path:Config, args:ArgumentParser):
         
         else:
             config.dataset_path = make_dataset_path(base_path, data_name)
-            if data_name == 'semantic':
+            if 'semantic' in data_name:
                 del config.dataset_path['test']
         
         # redefine config
@@ -80,9 +91,10 @@ def main(config_path:Config, args:ArgumentParser):
             json.dump(config.__dict__, f)
     
     if args.mode == 'benchmark':
+        del config.dataset_path['train']
         config.dataset_path['val'] = base_path + 'data/benchmark/' + args.benchmark + '/data.val'
 
-    trainer = Trainer(config, device, args.mode, args.cont)
+    trainer = Trainer(config, device, args.mode, args.cont, isSBERT)
 
     if args.mode == 'train':
         loss_data_path = config.loss_data_path
@@ -122,7 +134,7 @@ if __name__ == '__main__':
     path = path[:path.rfind('/')+1] + 'config.json'    
 
     parser = ArgumentParser()
-    parser.add_argument('-d', '--device', type=str, required=True, choices=['cpu', 'gpu'])
+    parser.add_argument('-d', '--device', type=str, required=True)
     parser.add_argument('-m', '--mode', type=str, required=True, choices=['train', 'inference', 'test', 'benchmark'])
     parser.add_argument('-c', '--cont', type=int, default=0, required=False)
     parser.add_argument('-n', '--name', type=str, required=False)

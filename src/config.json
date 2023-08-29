@@ -1,19 +1,20 @@
-{   
+{  
     "data": "semantic",    
 
     "base_path": "./",
-    "model_name": "semantic_bert_avg",
-    "loss_data_name": "semantic_bert_avg",
+    "model_name": "nli_bert",
+    "loss_data_name": "nli_bert",
 
     "flag": "avg",
+    "train_mode": ["nli"],
 
     "max_len": 128,
     "layernorm_eps": 1e-06,
 
 
-    "batch_size": 40,
-    "epochs": 100,
-    "lr": 1e-6,
+    "batch_size": 150,
+    "epochs": 200,
+    "lr": 1e-5,
 
     "vocab_size": 30000,
     
