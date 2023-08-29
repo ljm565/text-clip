@@ -63,13 +63,8 @@ def main(config_path:Config, args:ArgumentParser):
     trainer = Trainer(config, device, args.mode, args.cont, isSBERT)
 
     if args.mode == 'train':
-        loss_data_path = config.loss_data_path
         print('Start training...\n')
         loss_data = trainer.training()
-
-        print('Saving the loss related data...')
-        with open(loss_data_path, 'wb') as f:
-            pickle.dump(loss_data, f)
 
     elif args.mode == 'inference':
         print('Start inferencing...\n')

@@ -59,7 +59,6 @@ class Trainer:
         if not self.mode == 'benchmark':
             self.dataset = {split + '_' + m: SemanticDLoader(load_dataset(p), self.tokenizer, self.config) \
                 for split, mode in self.config.dataset_path.items() for m, p in mode.items()}
-            print(self.dataset)
         else:
             self.dataset = {s: SemanticDLoader(load_dataset(p), self.tokenizer, self.config) for s, p in self.config.dataset_path.items()}
 
@@ -73,7 +72,7 @@ class Trainer:
 
         # model, optimizer, losses
         self.model = BertClip(self.config, self.tokenizer, self.device).to(self.device)
-        self.nli_loss = losses.SoftmaxLoss(self.model.hidden_dim, 3)
+        self.nli_loss = losses.SoftmaxLoss(self.model.hidden_dim, 3).to(self.device)
         if self.mode == 'train':
             self.optimizer = optim.AdamW(self.model.parameters(), lr=self.lr)
             if self.continuous:
@@ -197,7 +196,8 @@ class Trainer:
         print('nli training starts')
         self.model.train()
         total_loss = 0
-        for i, (src, trg, label) in enumerate(self.dataloaders[phase+'_nli']):
+        phase = phase+'_nli'
+        for i, (src, trg, label) in enumerate(self.dataloaders[phase]):
             batch_size = src.size(0)
             self.optimizer.zero_grad()
             src, trg, label = src.to(self.device), trg.to(self.device), label.to(self.device)
