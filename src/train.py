@@ -113,6 +113,9 @@ class Trainer:
                         if task == 'clip':
                             clip_loss = self.clip_train(phase, epoch)
                             epoch_loss += clip_loss
+                        if task == 'reg':
+                            reg_loss = self.reg_train(phase, epoch)
+                            epoch_loss += reg_loss
                         # try:
                         #     epoch_loss = self.clip_train(phase, epoch)
                         # except KeyError:
@@ -131,11 +134,14 @@ class Trainer:
                     else:
                         epoch_loss = 0
                         if task == 'nli':
-                            nli_loss = self.nli_inference(phase, epoch)
+                            nli_loss = self.nli_inference(phase)
                             epoch_loss += nli_loss
                         if task == 'clip':
-                            clip_loss = self.clip_inference(phase, epoch)
+                            clip_loss = self.clip_inference(phase)
                             epoch_loss += clip_loss
+                        if task == 'reg':
+                            reg_loss = self.reg_inference(phase)
+                            epoch_loss += reg_loss
                         # try:
                         #     epoch_loss = self.clip_inference(phase)
                         # except KeyError:
@@ -230,13 +236,14 @@ class Trainer:
         print('regression training starts')
         self.model.train()
         total_loss = 0
+        phase = phase+'_reg'
         for i, (src, trg, label) in enumerate(self.dataloaders[phase]):
             batch_size = src.size(0)
             self.optimizer.zero_grad()
             src, trg, label = src.to(self.device), trg.to(self.device), label.to(self.device)
             
             with torch.set_grad_enabled('train' in phase):
-                _, _, _, cos_sim, _ = self.model(src, trg)
+                src, trg = self.model(src, trg)
 
                 loss = self.reg_criterion(cos_sim[torch.arange(batch_size), torch.arange(batch_size)], label)
                 loss.backward()
@@ -257,6 +264,7 @@ class Trainer:
         self.model.eval()
 
         total_loss = 0
+        phase = phase+'_clip'
         with torch.no_grad():
             for src, trg, _ in tqdm(self.dataloaders[phase], desc=phase + ' inferencing..'):
                 batch_size = src.size(0)
@@ -274,6 +282,7 @@ class Trainer:
         self.model.eval()
 
         total_loss = 0
+        phase = phase+'_nli'
         with torch.no_grad():
             for src, trg, label in tqdm(self.dataloaders[phase], desc=phase + ' inferencing..'):
                 batch_size = src.size(0)
@@ -289,6 +298,7 @@ class Trainer:
         self.model.eval()
 
         total_loss = 0
+        phase = phase+'reg'
         with torch.no_grad():
             for src, trg, label in tqdm(self.dataloaders[phase], desc=phase + ' inferencing..'):
                 batch_size = src.size(0)
@@ -379,8 +389,8 @@ class Trainer:
                     cos_sim = torch.diagonal(torch.mm(src_emb, trg_emb.transpose(0, 1)))
                 else:
                     src, trg = src.to(self.device), trg.to(self.device)
-                    _, _, _, cos_sim, _ = self.model(src, trg)
-                    cos_sim = torch.diagonal(cos_sim)
+                    src, trg = self.model(src, trg)
+                    cos_sim = torch.diagonal(torch.mm(src, trg.transpose(0, 1)))
                 # l = (l / 5) * 2 - 1
                 
                 all_cosSim.append(cos_sim.detach().cpu())

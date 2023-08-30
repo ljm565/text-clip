@@ -54,7 +54,7 @@ def main(config_path:Config, args:ArgumentParser):
         os.makedirs(model_folder, exist_ok=True)
           
         with open(model_json_path, 'w') as f:
-            json.dump(config.__dict__, f)
+            json.dump(config.__dict__, f, indent=4)
     
     if args.mode == 'benchmark':
         del config.dataset_path['train']
