@@ -74,6 +74,7 @@ class Trainer:
         self.model = BertClip(self.config, self.tokenizer, self.device).to(self.device)
         self.nli_loss = losses.SoftmaxLoss(self.model.hidden_dim, 3).to(self.device)
         self.clip_loss = losses.ClipLoss().to(self.device)
+        self.reg_loss = losses.CosSimLoss().to(self.device)
         if self.mode == 'train':
             self.optimizer = optim.AdamW(self.model.parameters(), lr=self.lr)
             if self.continuous:
@@ -244,8 +245,7 @@ class Trainer:
             
             with torch.set_grad_enabled('train' in phase):
                 src, trg = self.model(src, trg)
-
-                loss = self.reg_criterion(cos_sim[torch.arange(batch_size), torch.arange(batch_size)], label)
+                loss = self.reg_loss([src, trg], label)
                 loss.backward()
                 self.optimizer.step()
 
@@ -303,9 +303,8 @@ class Trainer:
             for src, trg, label in tqdm(self.dataloaders[phase], desc=phase + ' inferencing..'):
                 batch_size = src.size(0)
                 src, trg, label = src.to(self.device), trg.to(self.device), label.to(self.device)
-                _, _, _, cos_sim, _ = self.model(src, trg)
-                
-                loss = self.reg_criterion(cos_sim[torch.arange(batch_size), torch.arange(batch_size)], label)
+                src, trg = self.model(src, trg)
+                loss = self.nli_loss([src, trg], label)
 
                 total_loss += loss.item() * batch_size
             
