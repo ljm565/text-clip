@@ -298,16 +298,14 @@ class Trainer:
         self.model.eval()
 
         total_loss = 0
-        phase = phase+'reg'
+        phase = phase+'_reg'
         with torch.no_grad():
             for src, trg, label in tqdm(self.dataloaders[phase], desc=phase + ' inferencing..'):
                 batch_size = src.size(0)
                 src, trg, label = src.to(self.device), trg.to(self.device), label.to(self.device)
                 src, trg = self.model(src, trg)
-                loss = self.nli_loss([src, trg], label)
-
+                loss = self.reg_loss([src, trg], label)
                 total_loss += loss.item() * batch_size
-            
             print('loss: {}'.format(total_loss/len(self.dataloaders[phase].dataset)))
             print()
             return total_loss/len(self.dataloaders[phase].dataset)
